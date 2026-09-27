@@ -45,10 +45,10 @@ else:
             character_image_url = fal_client.upload_file(tmp_file_path)
             os.unlink(tmp_file_path)
 
-    # שדה לשינוי לוק מותאם אישית (ללא מילים רגישות שיקפיצו חסימה)
+    # שדה לשינוי לוק עם פרומפט מכוון למראה ריאליסטי ולא "פלסטיקי"
     change_outfit_prompt = st.text_area(
         "תיאור השינוי (לוק חדש, בגדים, רקע וכו' תוך שמירה על הפנים):",
-        "The same model wearing elegant summer resort fashion, standing on a luxury yacht deck, high-end fashion magazine style, photorealistic, 8k",
+        "The same model wearing elegant summer resort fashion, raw iPhone photo, natural daylight, candid shot, slightly imperfect, realistic skin texture, no airbrush",
     )
 
 motion_prompt = st.text_area(
@@ -70,7 +70,7 @@ if st.button("🚀 צור סרטון", type="primary"):
                 image_url = img_result["images"][0]["url"]
                 st.image(image_url, caption="תמונת בסיס")
 
-        # שלב 2: עדכון הלוק של הדמות
+        # שלב 2: עדכון הלוק של הדמות עם שמירת פנים
         elif upload_option == "העלאת תמונה ושמירת פנים (Character Consistency)":
             if character_image_url:
                 with st.spinner("🔄 מעדכן את הלוק של הדמות תוך שמירה על הפנים..."):
@@ -79,7 +79,7 @@ if st.button("🚀 צור סרטון", type="primary"):
                         arguments={
                             "prompt": change_outfit_prompt,
                             "image_url": character_image_url,
-                            "strength": 0.70,  # עוצמת שינוי מאוזנת לשמירת תווי הפנים
+                            "strength": 0.70,  
                             "image_size": "portrait_16_9",
                         },
                     )
