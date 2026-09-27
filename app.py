@@ -12,10 +12,27 @@ else:
     st.error("⚠️ מפתח FAL_KEY חסר בהגדרות!")
     st.stop()
 
-image_prompt = st.text_area(
-    "תיאור התמונה:",
-    "A fashion model in urban Tel Aviv, highly detailed 8k photography",
+# בחירה בין יצירת תמונה חדשה מ-AI לבין העלאת תמונה קיימת
+upload_option = st.radio(
+    "בחר מקור לתמונה:", ["יצירת תמונה חדשה מ-AI", "העלאת תמונה משלי"]
 )
+
+image_url = None
+
+if upload_option == "יצירת תמונה חדשה מ-AI":
+    image_prompt = st.text_area(
+        "תיאור התמונה:",
+        "A fashion model in urban Tel Aviv, highly detailed 8k photography",
+    )
+else:
+    uploaded_file = st.file_uploader(
+        "בחר תמונה מהמכשיר", type=["jpg", "jpeg", "png"]
+    )
+    if uploaded_file is not None:
+        with st.spinner("מעלה את התמונה לשרת..."):
+            # העלאת הקובץ לשרתים של fal כדי לקבל כתובת URL שהמודל יכול לקרוא
+            image_url = fal_client.upload_file(uploaded_file)
+            st.image(uploaded_file, caption="התמונה שהועלתה")
 
 motion_prompt = st.text_area(
     "תיאור התנועה בווידאו:", "The model turns slowly toward the camera and smiles"
@@ -23,29 +40,35 @@ motion_prompt = st.text_area(
 
 if st.button("🚀 צור סרטון", type="primary"):
     try:
-        with st.spinner("🎨 יוצר תמונת בסיס..."):
-            img_result = fal_client.subscribe(
-                "fal-ai/flux/dev",
-                arguments={
-                    "prompt": image_prompt,
-                    "image_size": "portrait_16_9",
-                },
-            )
-            image_url = img_result["images"][0]["url"]
-            st.image(image_url, caption="תמונת בסיס")
+        # שלב 1: אם בחרנו לייצר תמונה חדשה מ-AI
+        if upload_option == "יצירת תמונה חדשה מ-AI":
+            with st.spinner("🎨 יוצר תמונת בסיס..."):
+                img_result = fal_client.subscribe(
+                    "fal-ai/flux/dev",
+                    arguments={
+                        "prompt": image_prompt,
+                        "image_size": "portrait_16_9",
+                    },
+                )
+                image_url = img_result["images"][0]["url"]
+                st.image(image_url, caption="תמונת בסיס")
 
-        with st.spinner("🎬 מנפיש לווידאו..."):
-            video_result = fal_client.subscribe(
-                "fal-ai/kling-video/v1.5/pro/image-to-video",
-                arguments={
-                    "prompt": motion_prompt,
-                    "image_url": image_url,
-                    "duration": "5",
-                },
-            )
-            video_url = video_result["video"]["url"]
-            st.success("🎉 מוכן!")
-            st.video(video_url)
+        # שלב 2: הנפשת התמונה (בין אם נוצרה מטקסט ובין אם הועלתה)
+        if image_url:
+            with st.spinner("🎬 מנפיש לווידאו..."):
+                video_result = fal_client.subscribe(
+                    "fal-ai/kling-video/v1.5/pro/image-to-video",
+                    arguments={
+                        "prompt": motion_prompt,
+                        "image_url": image_url,
+                        "duration": "5",
+                    },
+                )
+                video_url = video_result["video"]["url"]
+                st.success("🎉 מוכן!")
+                st.video(video_url)
+        else:
+            st.warning("נא להעלות תמונה או לבחור יצירה מ-AI לפני הלחיצה.")
 
     except Exception as e:
         st.error(f"שגיאה: {e}")
