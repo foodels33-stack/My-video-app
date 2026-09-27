@@ -1,4 +1,5 @@
 import os
+import tempfile
 import fal_client
 import streamlit as st
 
@@ -29,10 +30,19 @@ else:
         "בחר תמונה מהמכשיר", type=["jpg", "jpeg", "png"]
     )
     if uploaded_file is not None:
+        st.image(uploaded_file, caption="התמונה שהועלתה")
+        # שמירת הקובץ בצורה זמנית כדי ש-fal_client יוכל לקרוא אותו כנתיב קובץ תקין
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix="." + uploaded_file.name.split(".")[-1],
+        ) as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_file_path = tmp_file.name
+
         with st.spinner("מעלה את התמונה לשרת..."):
-            # העלאת הקובץ לשרתים של fal כדי לקבל כתובת URL שהמודל יכול לקרוא
-            image_url = fal_client.upload_file(uploaded_file)
-            st.image(uploaded_file, caption="התמונה שהועלתה")
+            image_url = fal_client.upload_file(tmp_file_path)
+            # ניקוי הקובץ הזמני מהמערכת
+            os.unlink(tmp_file_path)
 
 motion_prompt = st.text_area(
     "תיאור התנועה בווידאו:", "The model turns slowly toward the camera and smiles"
@@ -55,7 +65,7 @@ if st.button("🚀 צור סרטון", type="primary"):
 
         # שלב 2: הנפשת התמונה (בין אם נוצרה מטקסט ובין אם הועלתה)
         if image_url:
-            with st.spinner("🎬 מנפיש לווידאו..."):
+            with st.spinner("🎬 מנפיש לווידאו... (זה יכול לקחת כמה דקות)"):
                 video_result = fal_client.subscribe(
                     "fal-ai/kling-video/v1.5/pro/image-to-video",
                     arguments={
