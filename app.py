@@ -45,10 +45,10 @@ else:
             character_image_url = fal_client.upload_file(tmp_file_path)
             os.unlink(tmp_file_path)
 
-    # שדה נוסף שמאפשר לבקש לוק חדש (בגד ים, בגדים, רקע) תוך שמירה על הפנים
+    # שדה לשינוי לוק מותאם אישית (ללא מילים רגישות שיקפיצו חסימה)
     change_outfit_prompt = st.text_area(
-        "תיאור השינוי (לוק חדש, בגד ים, רקע וכו' תוך שמירה על הפנים):",
-        "The same model wearing a sexy luxury designer bikini, standing on a yacht deck, photorealistic, 8k",
+        "תיאור השינוי (לוק חדש, בגדים, רקע וכו' תוך שמירה על הפנים):",
+        "The same model wearing elegant summer resort fashion, standing on a luxury yacht deck, high-end fashion magazine style, photorealistic, 8k",
     )
 
 motion_prompt = st.text_area(
@@ -70,17 +70,16 @@ if st.button("🚀 צור סרטון", type="primary"):
                 image_url = img_result["images"][0]["url"]
                 st.image(image_url, caption="תמונת בסיס")
 
-        # שלב 2: אם בחרנו להעלות תמונה ולשנות לה את הלוק תוך שמירת הפנים (Face-to-Image / IP-Adapter style)
+        # שלב 2: עדכון הלוק של הדמות
         elif upload_option == "העלאת תמונה ושמירת פנים (Character Consistency)":
             if character_image_url:
                 with st.spinner("🔄 מעדכן את הלוק של הדמות תוך שמירה על הפנים..."):
-                    # שימוש ב-Flux Dev עם התייחסות לתמונת המקור כדי לשמור עקביות פנים ולשנות לוק
                     consistent_img_result = fal_client.subscribe(
                         "fal-ai/flux/dev/image-to-image",
                         arguments={
                             "prompt": change_outfit_prompt,
                             "image_url": character_image_url,
-                            "strength": 0.75,  # שולט בעוצמת השינוי (0.75 מאפשר להחליף בגדים ולשמור על מבנה הפנים)
+                            "strength": 0.70,  # עוצמת שינוי מאוזנת לשמירת תווי הפנים
                             "image_size": "portrait_16_9",
                         },
                     )
