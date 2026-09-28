@@ -161,14 +161,14 @@ if st.button("🚀 צור סרטון", type="primary"):
             elif audio_mode == "יצירת קול מטקסט (Text-to-Speech AI)" and spoken_text:
                 with st.spinner("🗣️ מייצר קול AI מהטקסט..."):
                     if language == "עברית 🇮🇱":
-                        # שימוש במודל ElevenLabs / Multilingual לתמיכה מלאה בעברית
+                        # נתיב מתוקן עבור ElevenLabs ב-Fal.ai
                         voice_id = "21m00Tcm4TlvDq8ikWAM" if voice_gender == "אישה 👩" else "pNInz6obpgDQGcFmaJgB"
                         tts_result = fal_client.subscribe(
-                            "fal-ai/elevenlabs/text-to-speech",
+                            "fal-ai/elevenlabs/tts",
                             arguments={
+                                "text": spoken_text,
                                 "prompt": spoken_text,
-                                "voice": voice_id,
-                                "model_id": "eleven_multilingual_v2"
+                                "voice": voice_id
                             },
                         )
                     else:
