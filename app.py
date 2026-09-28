@@ -2,18 +2,21 @@ import os
 import tempfile
 import fal_client
 import streamlit as st
+from elevenlabs.client import ElevenLabs
 
 st.set_page_config(page_title="AI Video Generator - Veylura", layout="centered")
 st.title("🎬 מחולל וידאו AI - הפקות אופנה, הקלטה קולית ו-Lip Sync")
 
-# חיבור מפתח ה-API מההגדרות השמורות
+# בדיקת מפתחות API
 if "FAL_KEY" in st.secrets:
     os.environ["FAL_KEY"] = st.secrets["FAL_KEY"]
 else:
     st.error("⚠️ מפתח FAL_KEY חסר בהגדרות!")
     st.stop()
 
-# בחירה בין יצירת תמונה חדשה מ-AI לבין העלאת תמונה קיימת ושמירת פנים
+elevenlabs_api_key = st.secrets.get("ELEVENLABS_API_KEY")
+
+# בחירת מקור לתמונה
 upload_option = st.radio(
     "בחר מקור לתמונה:", ["יצירת תמונה חדשה מ-AI", "העלאת תמונה ושמירת פנים (Character Consistency)"]
 )
@@ -24,7 +27,7 @@ character_image_url = None
 if upload_option == "יצירת תמונה חדשה מ-AI":
     image_prompt = st.text_area(
         "תיאור התמונה:",
-        "A fashion model in urban Tel Aviv, highly detailed 8k photography",
+        value="A high-end fashion model in Tel Aviv, high editorial style, natural daylight, candid shot, photorealistic skin texture, 8k resolution"
     )
 else:
     uploaded_file = st.file_uploader(
@@ -33,7 +36,6 @@ else:
     if uploaded_file is not None:
         st.image(uploaded_file, caption="תמונת המקור שהועלתה")
         
-        # שמירת הקובץ בצורה זמנית כדי ש-fal_client יוכל לקרוא אותו
         with tempfile.NamedTemporaryFile(
             delete=False,
             suffix="." + uploaded_file.name.split(".")[-1],
@@ -45,50 +47,47 @@ else:
             character_image_url = fal_client.upload_file(tmp_file_path)
             os.unlink(tmp_file_path)
 
-    # שדה לשינוי לוק עם פרומפט מכוון למראה ריאליסטי
     change_outfit_prompt = st.text_area(
         "תיאור השינוי (לוק חדש, בגדים, רקע וכו' תוך שמירה על הפנים):",
-        "The same model wearing elegant summer resort fashion, raw iPhone photo, natural daylight, candid shot, slightly imperfect, realistic skin texture, no airbrush",
+        value="The same model wearing elegant summer resort fashion, raw iPhone photo, natural daylight, candid shot, slightly imperfect, realistic skin texture, no airbrush"
     )
 
 motion_prompt = st.text_area(
-    "תיאור התנועה בווידאו:", "The model turns slowly toward the camera, looking stylish, cinematic movement"
+    "תיאור התנועה בווידאו:", 
+    value="Front facing fashion model looking directly at the camera, smooth subtle head motion, perfectly visible mouth, clear studio lighting"
 )
 
-# תוספת: אפשרויות שמע מורחבות (קובץ חיצוני, TTS עברית/אנגלית, או הקלטת קול בלייב)
+# שמע ו-Lip Sync
 st.markdown("---")
 st.subheader("🎵 סנכרון שפתיים ושמע (Lip-Sync)")
 
 audio_mode = st.radio(
     "בחר מקור שמע לדיבור/סנכרון שפתיים:",
     [
+        "יצירת קול מטקסט AI יוקרתי (ElevenLabs) 🗣️", 
         "ללא אודיו", 
         "הקלטת קול ישירה מהמיקרופון 🎙️", 
-        "יצירת קול מטקסט (Text-to-Speech AI)", 
         "העלאת קובץ שמע (MP3 / WAV)"
     ]
 )
 
 spoken_text = None
-language = "עברית 🇮🇱"
 voice_gender = "אישה 👩"
 uploaded_audio = None
 recorded_audio = None
 
 if audio_mode == "הקלטת קול ישירה מהמיקרופון 🎙️":
-    # רכיב הקלטת קול מובנה של Streamlit
     if hasattr(st, "audio_input"):
         recorded_audio = st.audio_input("לחץ על כפתור ההקלטה ודבר ישירות למיקרופון:")
     else:
         st.warning("גרסת Streamlit אינה תומכת בהקלטה ישירה. יש לעדכן את streamlit או להשתמש בהעלאת קובץ.")
 
-elif audio_mode == "יצירת קול מטקסט (Text-to-Speech AI)":
-    spoken_text = st.text_area("הכנס את הטקסט שהדמות תגיד:", "שלום, ברוכים הבאים לתצוגת האופנה החדשה של סוכנות ויילורה.")
-    col1, col2 = st.columns(2)
-    with col1:
-        language = st.radio("בחר שפה:", ["עברית 🇮🇱", "אנגלית 🇺🇸"], horizontal=True)
-    with col2:
-        voice_gender = st.radio("בחר מגדר קול:", ["אישה 👩", "גבר 👨"], horizontal=True)
+elif audio_mode == "יצירת קול מטקסט AI יוקרתי (ElevenLabs) 🗣️":
+    spoken_text = st.text_area(
+        "הכנס את הטקסט שהדמות תגיד (מומלץ משפט קצר של 3-5 שניות):", 
+        value="שלום, ברוכים הבאים לקולקציה החדשה של ויילורה."
+    )
+    voice_gender = st.radio("בחר מגדר קול:", ["אישה 👩", "גבר 👨"], horizontal=True)
 
 elif audio_mode == "העלאת קובץ שמע (MP3 / WAV)":
     uploaded_audio = st.file_uploader(
@@ -98,7 +97,7 @@ elif audio_mode == "העלאת קובץ שמע (MP3 / WAV)":
 
 if st.button("🚀 צור סרטון", type="primary"):
     try:
-        # שלב 1: אם בחרנו לייצר תמונה חדשה מאפס
+        # 1. תמונה
         if upload_option == "יצירת תמונה חדשה מ-AI":
             with st.spinner("🎨 יוצר תמונת בסיס..."):
                 img_result = fal_client.subscribe(
@@ -111,7 +110,6 @@ if st.button("🚀 צור סרטון", type="primary"):
                 image_url = img_result["images"][0]["url"]
                 st.image(image_url, caption="תמונת בסיס")
 
-        # שלב 2: עדכון הלוק של הדמות עם שמירת פנים
         elif upload_option == "העלאת תמונה ושמירת פנים (Character Consistency)":
             if character_image_url:
                 with st.spinner("🔄 מעדכן את הלוק של הדמות תוך שמירה על הפנים..."):
@@ -120,19 +118,19 @@ if st.button("🚀 צור סרטון", type="primary"):
                         arguments={
                             "prompt": change_outfit_prompt,
                             "image_url": character_image_url,
-                            "strength": 0.70,  
+                            "strength": 0.40,
                             "image_size": "portrait_16_9",
                         },
                     )
                     image_url = consistent_img_result["images"][0]["url"]
-                    st.image(image_url, caption="דמות לאחר עדכון לוק (שמירת פנים)")
+                    st.image(image_url, caption="דמות לאחר עדכון לוק")
             else:
                 st.warning("נא להעלות תחילה תמונה של הדמות.")
 
-        # שלב 3: הנפשת התמונה הסופית בווידאו (Kling AI)
+        # 2. וידאו Kling
         video_url = None
         if image_url:
-            with st.spinner("🎬 מנפיש לווידאו ב-Kling... (זה יכול לקחת כמה דקות)"):
+            with st.spinner("🎬 מנפיש לווידאו ב-Kling..."):
                 video_result = fal_client.subscribe(
                     "fal-ai/kling-video/v1.5/pro/image-to-video",
                     arguments={
@@ -143,11 +141,10 @@ if st.button("🚀 צור סרטון", type="primary"):
                 )
                 video_url = video_result["video"]["url"]
 
-        # שלב 4: טיפול באודיו (הקלטה / TTS / קובץ) וביצוע Lip-Sync
+        # 3. אודיו
         audio_url = None
 
         if video_url:
-            # אופציה א': הקלטה ישירה מהמיקרופון
             if audio_mode == "הקלטת קול ישירה מהמיקרופון 🎙️" and recorded_audio is not None:
                 with st.spinner("🎤 מעלה את ההקלטה הקולית..."):
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_rec:
@@ -157,37 +154,32 @@ if st.button("🚀 צור סרטון", type="primary"):
                     audio_url = fal_client.upload_file(tmp_rec_path)
                     os.unlink(tmp_rec_path)
 
-            # אופציה ב': מחולל דיבור מטקסט (TTS) - כולל תמיכה בעברית ובאנגלית
-            elif audio_mode == "יצירת קול מטקסט (Text-to-Speech AI)" and spoken_text:
-                with st.spinner("🗣️ מייצר קול AI מהטקסט..."):
-                    if language == "עברית 🇮🇱":
-                        # נתיב מתוקן עבור ElevenLabs ב-Fal.ai
+            elif audio_mode == "יצירת קול מטקסט AI יוקרתי (ElevenLabs) 🗣️" and spoken_text:
+                if not elevenlabs_api_key:
+                    st.error("⚠️ מפתח ELEVENLABS_API_KEY חסר ב-st.secrets!")
+                else:
+                    with st.spinner("🗣️ מייצר קול אנושי בעברית דרך ElevenLabs..."):
+                        client = ElevenLabs(api_key=elevenlabs_api_key)
+                        
+                        # קול נשי (Rachel) או גברי (Adam)
                         voice_id = "21m00Tcm4TlvDq8ikWAM" if voice_gender == "אישה 👩" else "pNInz6obpgDQGcFmaJgB"
-                        tts_result = fal_client.subscribe(
-                            "fal-ai/elevenlabs/tts",
-                            arguments={
-                                "text": spoken_text,
-                                "prompt": spoken_text,
-                                "voice": voice_id
-                            },
+                        
+                        # מתודה מעודכנת של ElevenLabs SDK
+                        audio_generator = client.text_to_speech.convert(
+                            voice_id=voice_id,
+                            text=spoken_text,
+                            model_id="eleven_multilingual_v2"
                         )
-                    else:
-                        # אנגלית - PlayAI
-                        voice_id = (
-                            "Jennifer (English (US)/American)" 
-                            if voice_gender == "אישה 👩" 
-                            else "Angelo (English (US)/American)"
-                        )
-                        tts_result = fal_client.subscribe(
-                            "fal-ai/playai/tts/v3",
-                            arguments={
-                                "prompt": spoken_text,
-                                "voice": voice_id
-                            },
-                        )
-                    audio_url = tts_result.get("audio", {}).get("url") or tts_result.get("url")
+                        
+                        audio_bytes = b"".join(audio_generator)
 
-            # אופציה ג': קובץ שמע מועלה
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_audio:
+                            tmp_audio.write(audio_bytes)
+                            tmp_audio_path = tmp_audio.name
+
+                        audio_url = fal_client.upload_file(tmp_audio_path)
+                        os.unlink(tmp_audio_path)
+
             elif audio_mode == "העלאת קובץ שמע (MP3 / WAV)" and uploaded_audio is not None:
                 with st.spinner("🎤 מעלה את קובץ האודיו..."):
                     with tempfile.NamedTemporaryFile(
@@ -200,7 +192,7 @@ if st.button("🚀 צור סרטון", type="primary"):
                     audio_url = fal_client.upload_file(tmp_audio_path)
                     os.unlink(tmp_audio_path)
 
-            # ביצוע Lip-Sync במידה ויש audio_url
+            # 4. Lip-Sync
             if audio_url:
                 with st.spinner("👄 מבצע סנכרון שפתיים (Lip-Sync)..."):
                     lipsync_result = fal_client.subscribe(
@@ -214,7 +206,7 @@ if st.button("🚀 צור סרטון", type="primary"):
                     if final_video_url:
                         video_url = final_video_url
 
-                st.success("🎉 הווידאו הופק בהצלחה כולל קול וסנכרון שפתיים!")
+                st.success("🎉 הווידאו הופק בהצלחה כולל קול אנושי וסנכרון שפתיים!")
                 st.video(video_url)
             else:
                 st.success("🎉 הווידאו הופק בהצלחה (ללא סאונד)!")
