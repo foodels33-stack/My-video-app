@@ -3,8 +3,8 @@ import tempfile
 import fal_client
 import streamlit as st
 
-st.set_page_config(page_title="AI Video Generator", layout="centered")
-st.title("🎬 מחולל וידאו AI - הפקות אופנה")
+st.set_page_config(page_title="AI Video Generator - Veylura", layout="centered")
+st.title("🎬 מחולל וידאו AI - הפקות אופנה ו-Lip Sync")
 
 # חיבור מפתח ה-API מההגדרות השמורות
 if "FAL_KEY" in st.secrets:
@@ -45,14 +45,22 @@ else:
             character_image_url = fal_client.upload_file(tmp_file_path)
             os.unlink(tmp_file_path)
 
-    # שדה לשינוי לוק עם פרומפט מכוון למראה ריאליסטי ולא "פלסטיקי"
+    # שדה לשינוי לוק עם פרומפט מכוון למראה ריאליסטי
     change_outfit_prompt = st.text_area(
         "תיאור השינוי (לוק חדש, בגדים, רקע וכו' תוך שמירה על הפנים):",
         "The same model wearing elegant summer resort fashion, raw iPhone photo, natural daylight, candid shot, slightly imperfect, realistic skin texture, no airbrush",
     )
 
 motion_prompt = st.text_area(
-    "תיאור התנועה בווידאו:", "The model turns slowly toward the camera and smiles, cinematic movement"
+    "תיאור התנועה בווידאו:", "The model turns slowly toward the camera, looking stylish, cinematic movement"
+)
+
+# תוספת: העלאת סאונד לטרנד ולסנכרון שפתיים (Lip-Sync)
+st.markdown("---")
+st.subheader("🎵 סנכרון שפתיים ושמע (Lip-Sync Trend)")
+uploaded_audio = st.file_uploader(
+    "העלה קובץ שמע של הטרנד (MP3 / WAV) - אופציונלי:", 
+    type=["mp3", "wav", "m4a", "ogg"]
 )
 
 if st.button("🚀 צור סרטון", type="primary"):
@@ -88,9 +96,10 @@ if st.button("🚀 צור סרטון", type="primary"):
             else:
                 st.warning("נא להעלות תחילה תמונה של הדמות.")
 
-        # שלב 3: הנפשת התמונה הסופית בווידאו (Kling)
+        # שלב 3: הנפשת התמונה הסופית בווידאו (Kling AI)
+        video_url = None
         if image_url:
-            with st.spinner("🎬 מנפיש לווידאו... (זה יכול לקחת כמה דקות)"):
+            with st.spinner("🎬 מנפיש לווידאו ב-Kling... (זה יכול לקחת כמה דקות)"):
                 video_result = fal_client.subscribe(
                     "fal-ai/kling-video/v1.5/pro/image-to-video",
                     arguments={
@@ -100,8 +109,40 @@ if st.button("🚀 צור סרטון", type="primary"):
                     },
                 )
                 video_url = video_result["video"]["url"]
-                st.success("🎉 מוכן!")
-                st.video(video_url)
+
+        # שלב 4: אם הועלה קובץ אודיו - ביצוע Lip-Sync
+        if video_url and uploaded_audio is not None:
+            with st.spinner("🎤 מעלה את האודיו ומבצע סנכרון שפתיים (Lip-Sync)..."):
+                # שמירה זמנית של קובץ השמע
+                with tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix="." + uploaded_audio.name.split(".")[-1],
+                ) as tmp_audio:
+                    tmp_audio.write(uploaded_audio.getvalue())
+                    tmp_audio_path = tmp_audio.name
+
+                audio_url = fal_client.upload_file(tmp_audio_path)
+                os.unlink(tmp_audio_path)
+
+                # סנכרון שפתיים על הוידאו מ-Kling
+                lipsync_result = fal_client.subscribe(
+                    "fal-ai/sync-lipsync",
+                    arguments={
+                        "video_url": video_url,
+                        "audio_url": audio_url,
+                    },
+                )
+                
+                # קבלת כתובת הוידאו המסונכרן הסופי
+                final_video_url = lipsync_result.get("video", {}).get("url") or lipsync_result.get("url")
+                if final_video_url:
+                    video_url = final_video_url
+
+            st.success("🎉 הווידאו הופק בהצלחה כולל סאונד וסנכרון שפתיים!")
+            st.video(video_url)
+        elif video_url:
+            st.success("🎉 הווידאו הופק בהצלחה (ללא סאונד)!")
+            st.video(video_url)
 
     except Exception as e:
         st.error(f"שגיאה: {e}")
