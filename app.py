@@ -4,7 +4,7 @@ import fal_client
 import streamlit as st
 
 st.set_page_config(page_title="AI Video Generator - Veylura", layout="centered")
-st.title("🎬 מחולל וידאו AI - הפקות אופנה ו-Lip Sync")
+st.title("🎬 מחולל וידאו AI - הפקות אופנה, הקלטה קולית ו-Lip Sync")
 
 # חיבור מפתח ה-API מההגדרות השמורות
 if "FAL_KEY" in st.secrets:
@@ -55,13 +55,46 @@ motion_prompt = st.text_area(
     "תיאור התנועה בווידאו:", "The model turns slowly toward the camera, looking stylish, cinematic movement"
 )
 
-# תוספת: העלאת סאונד לטרנד ולסנכרון שפתיים (Lip-Sync)
+# תוספת: אפשרויות שמע מורחבות (קובץ חיצוני, TTS עברית/אנגלית, או הקלטת קול בלייב)
 st.markdown("---")
-st.subheader("🎵 סנכרון שפתיים ושמע (Lip-Sync Trend)")
-uploaded_audio = st.file_uploader(
-    "העלה קובץ שמע של הטרנד (MP3 / WAV) - אופציונלי:", 
-    type=["mp3", "wav", "m4a", "ogg"]
+st.subheader("🎵 סנכרון שפתיים ושמע (Lip-Sync)")
+
+audio_mode = st.radio(
+    "בחר מקור שמע לדיבור/סנכרון שפתיים:",
+    [
+        "ללא אודיו", 
+        "הקלטת קול ישירה מהמיקרופון 🎙️", 
+        "יצירת קול מטקסט (Text-to-Speech AI)", 
+        "העלאת קובץ שמע (MP3 / WAV)"
+    ]
 )
+
+spoken_text = None
+language = "עברית 🇮🇱"
+voice_gender = "אישה 👩"
+uploaded_audio = None
+recorded_audio = None
+
+if audio_mode == "הקלטת קול ישירה מהמיקרופון 🎙️":
+    # רכיב הקלטת קול מובנה של Streamlit
+    if hasattr(st, "audio_input"):
+        recorded_audio = st.audio_input("לחץ על כפתור ההקלטה ודבר ישירות למיקרופון:")
+    else:
+        st.warning("גרסת Streamlit אינה תומכת בהקלטה ישירה. יש לעדכן את streamlit או להשתמש בהעלאת קובץ.")
+
+elif audio_mode == "יצירת קול מטקסט (Text-to-Speech AI)":
+    spoken_text = st.text_area("הכנס את הטקסט שהדמות תגיד:", "שלום, ברוכים הבאים לתצוגת האופנה החדשה של סוכנות ויילורה.")
+    col1, col2 = st.columns(2)
+    with col1:
+        language = st.radio("בחר שפה:", ["עברית 🇮🇱", "אנגלית 🇺🇸"], horizontal=True)
+    with col2:
+        voice_gender = st.radio("בחר מגדר קול:", ["אישה 👩", "גבר 👨"], horizontal=True)
+
+elif audio_mode == "העלאת קובץ שמע (MP3 / WAV)":
+    uploaded_audio = st.file_uploader(
+        "העלה קובץ שמע (MP3 / WAV):", 
+        type=["mp3", "wav", "m4a", "ogg"]
+    )
 
 if st.button("🚀 צור סרטון", type="primary"):
     try:
@@ -110,39 +143,82 @@ if st.button("🚀 צור סרטון", type="primary"):
                 )
                 video_url = video_result["video"]["url"]
 
-        # שלב 4: אם הועלה קובץ אודיו - ביצוע Lip-Sync
-        if video_url and uploaded_audio is not None:
-            with st.spinner("🎤 מעלה את האודיו ומבצע סנכרון שפתיים (Lip-Sync)..."):
-                # שמירה זמנית של קובץ השמע
-                with tempfile.NamedTemporaryFile(
-                    delete=False,
-                    suffix="." + uploaded_audio.name.split(".")[-1],
-                ) as tmp_audio:
-                    tmp_audio.write(uploaded_audio.getvalue())
-                    tmp_audio_path = tmp_audio.name
+        # שלב 4: טיפול באודיו (הקלטה / TTS / קובץ) וביצוע Lip-Sync
+        audio_url = None
 
-                audio_url = fal_client.upload_file(tmp_audio_path)
-                os.unlink(tmp_audio_path)
+        if video_url:
+            # אופציה א': הקלטה ישירה מהמיקרופון
+            if audio_mode == "הקלטת קול ישירה מהמיקרופון 🎙️" and recorded_audio is not None:
+                with st.spinner("🎤 מעלה את ההקלטה הקולית..."):
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_rec:
+                        tmp_rec.write(recorded_audio.getvalue())
+                        tmp_rec_path = tmp_rec.name
 
-                # סנכרון שפתיים על הוידאו מ-Kling
-                lipsync_result = fal_client.subscribe(
-                    "fal-ai/sync-lipsync",
-                    arguments={
-                        "video_url": video_url,
-                        "audio_url": audio_url,
-                    },
-                )
-                
-                # קבלת כתובת הוידאו המסונכרן הסופי
-                final_video_url = lipsync_result.get("video", {}).get("url") or lipsync_result.get("url")
-                if final_video_url:
-                    video_url = final_video_url
+                    audio_url = fal_client.upload_file(tmp_rec_path)
+                    os.unlink(tmp_rec_path)
 
-            st.success("🎉 הווידאו הופק בהצלחה כולל סאונד וסנכרון שפתיים!")
-            st.video(video_url)
-        elif video_url:
-            st.success("🎉 הווידאו הופק בהצלחה (ללא סאונד)!")
-            st.video(video_url)
+            # אופציה ב': מחולל דיבור מטקסט (TTS) - כולל תמיכה בעברית ובאנגלית
+            elif audio_mode == "יצירת קול מטקסט (Text-to-Speech AI)" and spoken_text:
+                with st.spinner("🗣️ מייצר קול AI מהטקסט..."):
+                    if language == "עברית 🇮🇱":
+                        # שימוש במודל ElevenLabs / Multilingual לתמיכה מלאה בעברית
+                        voice_id = "21m00Tcm4TlvDq8ikWAM" if voice_gender == "אישה 👩" else "pNInz6obpgDQGcFmaJgB"
+                        tts_result = fal_client.subscribe(
+                            "fal-ai/elevenlabs/text-to-speech",
+                            arguments={
+                                "prompt": spoken_text,
+                                "voice": voice_id,
+                                "model_id": "eleven_multilingual_v2"
+                            },
+                        )
+                    else:
+                        # אנגלית - PlayAI
+                        voice_id = (
+                            "Jennifer (English (US)/American)" 
+                            if voice_gender == "אישה 👩" 
+                            else "Angelo (English (US)/American)"
+                        )
+                        tts_result = fal_client.subscribe(
+                            "fal-ai/playai/tts/v3",
+                            arguments={
+                                "prompt": spoken_text,
+                                "voice": voice_id
+                            },
+                        )
+                    audio_url = tts_result.get("audio", {}).get("url") or tts_result.get("url")
+
+            # אופציה ג': קובץ שמע מועלה
+            elif audio_mode == "העלאת קובץ שמע (MP3 / WAV)" and uploaded_audio is not None:
+                with st.spinner("🎤 מעלה את קובץ האודיו..."):
+                    with tempfile.NamedTemporaryFile(
+                        delete=False,
+                        suffix="." + uploaded_audio.name.split(".")[-1],
+                    ) as tmp_audio:
+                        tmp_audio.write(uploaded_audio.getvalue())
+                        tmp_audio_path = tmp_audio.name
+
+                    audio_url = fal_client.upload_file(tmp_audio_path)
+                    os.unlink(tmp_audio_path)
+
+            # ביצוע Lip-Sync במידה ויש audio_url
+            if audio_url:
+                with st.spinner("👄 מבצע סנכרון שפתיים (Lip-Sync)..."):
+                    lipsync_result = fal_client.subscribe(
+                        "fal-ai/sync-lipsync",
+                        arguments={
+                            "video_url": video_url,
+                            "audio_url": audio_url,
+                        },
+                    )
+                    final_video_url = lipsync_result.get("video", {}).get("url") or lipsync_result.get("url")
+                    if final_video_url:
+                        video_url = final_video_url
+
+                st.success("🎉 הווידאו הופק בהצלחה כולל קול וסנכרון שפתיים!")
+                st.video(video_url)
+            else:
+                st.success("🎉 הווידאו הופק בהצלחה (ללא סאונד)!")
+                st.video(video_url)
 
     except Exception as e:
         st.error(f"שגיאה: {e}")
